@@ -1,0 +1,114 @@
+---
+title: "Coursera Machine Learning Project"
+author: "Alex Noll"
+date: "Tuesday, January 13, 2015"
+output: html_document
+---
+
+#Getting and preprocessing Data
+Firstly, we download the training and validation data set from the links specified on the homepage:
+```{r, cache=TRUE}
+setInternet2(use=TRUE)
+urll <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(urll,destfile="train.csv")
+urll <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(urll,destfile="test.csv")
+training <- read.csv("train.csv",na.string=c("","NA"))
+valid <- read.csv("test.csv",na.string=c("","NA"))
+```
+
+Now, we furthermore split the training data into a training data set, a test data set and a validation set:
+```{r}
+library(caret)
+inTrain <- createDataPartition(y=training$classe,p=0.6,list=FALSE)
+testing <- training[-inTrain,]
+training <- training[inTrain,]
+```
+
+There is a large set of variables that has almost only missing values. We firstly want to get rid of them:
+```{r}
+nas <- colMeans(is.na(training))
+training <- training[,nas < 0.5]
+```
+
+Furthermore, we clearly should not use the "name" or "time" variable to predict outcomes, so we remove them too:
+```{r}
+training <- training[,-5:-1]
+```
+
+Finally, we remove these columns on the test set and the validation set too:
+```{r}
+cn <- colnames(training)
+testing <- testing[,cn]
+valid <- valid[,cn[-length(cn)]]
+```
+
+After removing these variables, there are no missing values in the data set anymore:
+```{r}
+sum(is.na(training))
+sum(is.na(testing))
+```
+
+#Exploratory Data Analysis
+We have tried several plots to get some intuition about which variables contribute most. There are no obvious candidates and even after plotting many variables (density plots for single variables and scatterplots for pairs of variables) there are no single ones to distinguish. With a scatterplot, we could see, for example that "magnet_belt_y" and "accel_forearm_z" help distinguishing type "D" and type "E".
+```{r}
+qplot(training$magnet_belt_y,training$accel_forearm_z,col=training$classe,alpha=.0001)
+```
+
+On the other hand, further reduction of variables does not seem necessary, since the data are not high dimensional (many variables, few observations) to start with.  
+
+#Machine Learning algorithm
+From plots as above, it seems that a linear model is not the best choice, whereas a tree or random forest might perform well. We will try linear discriminant analysis, a tree and random forrest. For each case, we use K-fold cross validation with K=10 to obtain estimates for prediction errors. 
+
+##Linear Discriminant Analysis
+Split training set into test set and training set:
+```{r}
+inTrain2 <- createDataPartition(y=training$classe,p=0.8,list=FALSE)
+train2 <- training[inTrain2,]
+test2 <- training[-inTrain2,]
+```
+
+```{r,cache=TRUE}
+lmfit <- train(classe ~ ., data=train2, method="lda",trControl=trainControl(method="cv",number=10))
+confusionMatrix(test2$classe,predict(lmfit,test2))
+```
+
+##Tree
+```{r,cache=TRUE}
+inTrain2 <- createDataPartition(y=training$classe,p=0.8,list=FALSE)
+train2 <- training[inTrain2,]
+test2 <- training[-inTrain2,]
+```
+
+```{r}
+treefit <- train(classe ~ ., data=train2, method="rpart",trControl=trainControl(method="cv",number=10))
+confusionMatrix(test2$classe,predict(treefit,test2))
+```
+
+##Random Forest
+```{r,cache=TRUE}
+inTrain2 <- createDataPartition(y=training$classe,p=0.8,list=FALSE)
+train2 <- training[inTrain2,]
+test2 <- training[-inTrain2,]
+```
+
+```{r,cache=TRUE}
+forestfit <- train(classe ~ ., data=train2, method="rf",trControl=trainControl(method="cv",number=10))
+confusionMatrix(test2$classe,predict(forestfit,test2))
+```
+
+Looking at the confusion matrices, it is clear that the random forest algorithm performs by far best.
+
+#Testing
+We compare the prediction results with the independent test set:
+```{r}
+confusionMatrix(testing$classe,predict(forestfit,testing))
+```
+
+This gives us an estimate on the prediction error and interval to be expected.
+
+#Final Comments
+This model performed very well on the set for the submission and so is accurate enough for the purposes.  We list the predictions here:
+```{r}
+predict(forestfit,valid)
+```
